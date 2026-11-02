@@ -1,0 +1,2304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Table Tennis World Tour 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@700&family=Inter:wght@400;600;800&display=swap');
+
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #162a45;
+            font-family: 'Inter', sans-serif;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 3D WebGL Canvas */
+        #webgl-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Blue Grunge Painted Background matching reference screenshots */
+        .grunge-bg {
+            background-color: #2c4a78;
+            background-image: 
+                /* Subtle vignette */
+                radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.12) 0%, rgba(15, 28, 53, 0.75) 100%),
+                /* Horizontal light stripe bands from screenshot */
+                linear-gradient(to bottom, 
+                    transparent 0%, 
+                    transparent 34.5%, 
+                    rgba(255, 255, 255, 0.22) 34.8%, 
+                    rgba(255, 255, 255, 0.22) 36.2%, 
+                    transparent 36.5%,
+                    transparent 37.8%,
+                    rgba(255, 255, 255, 0.26) 38.2%,
+                    rgba(255, 255, 255, 0.22) 63.8%,
+                    transparent 64.2%,
+                    transparent 100%
+                );
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px;
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+
+        /* Procedural noise overlay applied via JS canvas data URL */
+        .grunge-noise {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.32;
+            mix-blend-mode: overlay;
+            z-index: 0;
+        }
+
+        .screen-content {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .hidden-screen {
+            opacity: 0 !important;
+            pointer-events: none !important;
+            z-index: -1 !important;
+        }
+
+        /* Typography matching screenshot */
+        .title-main {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(3.4rem, 8vw, 6.2rem);
+            line-height: 0.9;
+            letter-spacing: 3px;
+            color: #ffffff;
+            text-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+            /* Subtle distressed texture effect */
+            background: linear-gradient(180deg, #ffffff 10%, #e2e8f0 90%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.45));
+        }
+
+        .title-sub {
+            font-family: 'Cinzel', serif;
+            font-size: clamp(0.95rem, 2.2vw, 1.55rem);
+            letter-spacing: 0.75em;
+            color: #f1f5f9;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+            margin-top: 2px;
+            margin-right: -0.75em;
+        }
+
+        /* Big Yellow Play Button */
+        .btn-yellow-play {
+            width: clamp(180px, 26vw, 250px);
+            height: clamp(68px, 10vw, 94px);
+            border-radius: 9999px;
+            background: 
+                radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.45), transparent 60%),
+                linear-gradient(to bottom, #fde047 0%, #facc15 55%, #eab308 100%);
+            border: 4px solid #fef08a;
+            box-shadow: 
+                0 8px 0 #a16207,
+                0 14px 24px rgba(0, 0, 0, 0.55),
+                inset 0 2px 5px rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease;
+            position: relative;
+        }
+
+        .btn-yellow-play:hover {
+            transform: translateY(-2px) scale(1.03);
+            filter: brightness(1.06);
+        }
+
+        .btn-yellow-play:active {
+            transform: translateY(4px) scale(0.98);
+            box-shadow: 
+                0 3px 0 #a16207,
+                0 6px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .play-triangle {
+            width: 0;
+            height: 0;
+            border-top: clamp(16px, 2.4vw, 24px) solid transparent;
+            border-bottom: clamp(16px, 2.4vw, 24px) solid transparent;
+            border-left: clamp(28px, 4.2vw, 42px) solid #ffffff;
+            margin-left: 8px;
+            filter: drop-shadow(0 2px 3px rgba(161, 98, 7, 0.5));
+        }
+
+        /* Bronze / Copper Circular Buttons */
+        .btn-bronze {
+            width: clamp(46px, 6vw, 60px);
+            height: clamp(46px, 6vw, 60px);
+            border-radius: 50%;
+            background: 
+                radial-gradient(circle at 35% 25%, #e6b89c 0%, #b87b62 45%, #844d36 90%);
+            border: 3px solid #f2d5c4;
+            box-shadow: 
+                0 4px 10px rgba(0, 0, 0, 0.55),
+                inset 0 2px 4px rgba(255, 255, 255, 0.6),
+                inset 0 -3px 6px rgba(60, 25, 10, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #ffffff;
+            cursor: pointer;
+            transition: transform 0.12s ease, filter 0.12s ease;
+        }
+
+        .btn-bronze:hover {
+            transform: scale(1.07);
+            filter: brightness(1.1);
+        }
+
+        .btn-bronze:active {
+            transform: scale(0.94);
+        }
+
+        .btn-bronze-lg {
+            width: clamp(68px, 9vw, 92px);
+            height: clamp(68px, 9vw, 92px);
+        }
+
+        /* Top Scoreboard Flip Cards (Gameplay Screenshot 4) */
+        #hud-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 15;
+        }
+
+        .scoreboard-bar {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            pointer-events: auto;
+        }
+
+        .flip-card {
+            width: 46px;
+            height: 62px;
+            background: linear-gradient(180deg, #ffffff 0%, #f3f4f6 49%, #d1d5db 50%, #ffffff 51%, #e5e7eb 100%);
+            border-radius: 6px;
+            border: 1px solid #9ca3af;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 2.8rem;
+            color: #1f2937;
+            position: relative;
+            padding-top: 4px;
+        }
+
+        /* Flip Card Top Binder Rings */
+        .flip-card::before,
+        .flip-card::after {
+            content: '';
+            position: absolute;
+            top: -4px;
+            width: 4px;
+            height: 10px;
+            background: #9ca3af;
+            border-radius: 2px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+        .flip-card::before { left: 10px; }
+        .flip-card::after { right: 10px; }
+
+        .hud-flag {
+            width: clamp(46px, 10vw, 62px);
+            height: clamp(32px, 7vw, 44px);
+            border-radius: 3px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.55);
+            border: 1px solid rgba(255,255,255,0.4);
+            position: relative;
+        }
+
+        @media (max-width: 640px) {
+            .grunge-bg {
+                padding: 14px;
+            }
+            .flip-card {
+                width: 36px;
+                height: 48px;
+                font-size: 2.1rem;
+            }
+            .scoreboard-bar {
+                top: 8px;
+                gap: 5px;
+            }
+        }
+
+        .vs-flag {
+            width: clamp(95px, 14vw, 138px);
+            height: clamp(64px, 9.4vw, 92px);
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
+            border: 2px solid rgba(255,255,255,0.5);
+            position: relative;
+        }
+
+        /* Map Node Pins */
+        .map-node {
+            position: absolute;
+            width: clamp(32px, 4.2vw, 46px);
+            height: clamp(32px, 4.2vw, 46px);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(1.1rem, 1.8vw, 1.55rem);
+            color: #ffffff;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            z-index: 5;
+        }
+
+        .map-node.locked {
+            background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.55), rgba(200, 215, 235, 0.35));
+            border: 2px solid rgba(255, 255, 255, 0.65);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.35), inset 0 2px 4px rgba(255,255,255,0.6);
+            backdrop-filter: blur(2px);
+        }
+
+        .map-node.unlocked {
+            background: radial-gradient(circle at 30% 30%, #fde047, #f59e0b 65%, #d97706 100%);
+            border: 3px solid #fef08a;
+            box-shadow: 0 0 22px rgba(250, 204, 21, 0.9), 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        .map-node.selected {
+            transform: translate(-50%, -50%) scale(1.18);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 1), 0 6px 14px rgba(0,0,0,0.6);
+        }
+
+        /* Starburst behind active map node */
+        .starburst {
+            position: absolute;
+            width: 110px;
+            height: 110px;
+            pointer-events: none;
+            background: radial-gradient(circle, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 70%);
+            animation: pulseGlow 2s infinite alternate;
+            z-index: 4;
+            transform: translate(-50%, -50%);
+        }
+
+        @keyframes pulseGlow {
+            0% { transform: translate(-50%, -50%) scale(0.9) rotate(0deg); opacity: 0.75; }
+            100% { transform: translate(-50%, -50%) scale(1.15) rotate(25deg); opacity: 1; }
+        }
+
+        /* Modals */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(8, 18, 38, 0.78);
+            backdrop-filter: blur(5px);
+            z-index: 50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- 3D Gymnasium & Table Tennis Canvas -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <!-- ===================================================== -->
+    <!-- SCREEN 1: TITLE SCREEN (Matches Image 1)              -->
+    <!-- ===================================================== -->
+    <div id="screen-title" class="grunge-bg">
+        <div class="grunge-noise"></div>
+        <div class="screen-content">
+            <!-- Top Row: Right Icons (Info & Sound) -->
+            <div class="w-full flex justify-end items-center gap-3">
+                <button id="btn-info" class="btn-bronze" title="How to Play">
+                    <span class="font-serif italic font-bold text-2xl">i</span>
+                </button>
+                <button class="btn-bronze btn-sound-toggle" title="Toggle Sound">
+                    <svg class="w-7 h-7 sound-on-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                    <svg class="w-7 h-7 sound-off-icon hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+                </button>
+            </div>
+
+            <!-- Center Hero: Title + Laurel Globe + Crossed Paddles -->
+            <div class="flex flex-col items-center -mt-4">
+                <h1 class="title-main">TABLE TENNIS</h1>
+                <div class="title-sub">WORLD TOUR</div>
+
+                <!-- Laurel Wreath & Earth Emblem -->
+                <div class="flex items-center justify-center my-2">
+                    <svg class="w-56 h-12 overflow-visible" viewBox="0 0 240 50">
+                        <!-- Left Laurel -->
+                        <g fill="#e2e8f0" opacity="0.9" filter="drop-shadow(0 2px 3px rgba(0,0,0,0.4))">
+                            <path d="M95,26 C75,28 50,24 20,16 C35,23 55,28 85,28 Z"/>
+                            <ellipse cx="82" cy="22" rx="8" ry="3" transform="rotate(-20 82 22)"/>
+                            <ellipse cx="68" cy="20" rx="9" ry="3.2" transform="rotate(-15 68 20)"/>
+                            <ellipse cx="54" cy="18" rx="9" ry="3" transform="rotate(-10 54 18)"/>
+                            <ellipse cx="40" cy="16" rx="8" ry="2.8" transform="rotate(-5 40 16)"/>
+                            <ellipse cx="80" cy="30" rx="8" ry="3" transform="rotate(20 80 30)"/>
+                            <ellipse cx="66" cy="29" rx="9" ry="3.2" transform="rotate(15 66 29)"/>
+                            <ellipse cx="52" cy="26" rx="9" ry="3" transform="rotate(10 52 26)"/>
+                            <ellipse cx="38" cy="23" rx="8" ry="2.8" transform="rotate(8 38 23)"/>
+                        </g>
+                        <!-- Right Laurel -->
+                        <g fill="#e2e8f0" opacity="0.9" filter="drop-shadow(0 2px 3px rgba(0,0,0,0.4))" transform="translate(240, 0) scale(-1, 1)">
+                            <path d="M95,26 C75,28 50,24 20,16 C35,23 55,28 85,28 Z"/>
+                            <ellipse cx="82" cy="22" rx="8" ry="3" transform="rotate(-20 82 22)"/>
+                            <ellipse cx="68" cy="20" rx="9" ry="3.2" transform="rotate(-15 68 20)"/>
+                            <ellipse cx="54" cy="18" rx="9" ry="3" transform="rotate(-10 54 18)"/>
+                            <ellipse cx="40" cy="16" rx="8" ry="2.8" transform="rotate(-5 40 16)"/>
+                            <ellipse cx="80" cy="30" rx="8" ry="3" transform="rotate(20 80 30)"/>
+                            <ellipse cx="66" cy="29" rx="9" ry="3.2" transform="rotate(15 66 29)"/>
+                            <ellipse cx="52" cy="26" rx="9" ry="3" transform="rotate(10 52 26)"/>
+                            <ellipse cx="38" cy="23" rx="8" ry="2.8" transform="rotate(8 38 23)"/>
+                        </g>
+                        <!-- Center Earth Globe -->
+                        <defs>
+                            <radialGradient id="globeGrad" cx="35%" cy="30%" r="70%">
+                                <stop offset="0%" stop-color="#60a5fa"/>
+                                <stop offset="55%" stop-color="#1d4ed8"/>
+                                <stop offset="100%" stop-color="#0f172a"/>
+                            </radialGradient>
+                        </defs>
+                        <circle cx="120" cy="24" r="15" fill="url(#globeGrad)" stroke="#93c5fd" stroke-width="1"/>
+                        <path d="M113,14 Q118,18 115,25 Q112,30 117,35 Q123,31 121,24 Q126,19 120,12 Z" fill="#4ade80" opacity="0.85"/>
+                        <path d="M125,16 Q131,20 129,28 Q126,33 132,30 Q134,22 128,15 Z" fill="#22c55e" opacity="0.85"/>
+                        <circle cx="116" cy="19" r="11" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/>
+                    </svg>
+                </div>
+
+                <!-- High-Detail Crossed Paddles Canvas (Rendered with micro-pips & wood grain) -->
+                <div class="relative flex justify-center items-center my-1">
+                    <canvas id="title-paddles-canvas" width="340" height="240" class="w-[270px] h-[190px] md:w-[320px] md:h-[225px] drop-shadow-[0_12px_18px_rgba(0,0,0,0.55)]"></canvas>
+                </div>
+            </div>
+
+            <!-- Bottom Row: Play Button & Right Controls (Flags + Trophy) -->
+            <div class="w-full flex justify-center items-end relative">
+                <button id="btn-title-play" class="btn-yellow-play" title="Start World Tour">
+                    <div class="play-triangle"></div>
+                </button>
+
+                <!-- Bottom Right Flag Selector & Trophy -->
+                <div class="absolute right-0 bottom-0 flex flex-col items-center gap-3">
+                    <!-- 4-Flag Player Country Selector Badge -->
+                    <button id="btn-flag-selector" class="w-16 h-11 rounded border-2 border-gray-200 shadow-lg overflow-hidden grid grid-cols-2 grid-rows-2 cursor-pointer hover:scale-105 transition-transform" title="Switch Your Country Flag">
+                        <!-- UK -->
+                        <div class="bg-[#012169] relative flex items-center justify-center">
+                            <div class="w-full h-1 bg-white absolute rotate-25"></div>
+                            <div class="w-full h-1.5 bg-white absolute"></div>
+                            <div class="h-full w-1.5 bg-white absolute"></div>
+                            <div class="w-full h-0.5 bg-[#C8102E] absolute"></div>
+                            <div class="h-full w-0.5 bg-[#C8102E] absolute"></div>
+                        </div>
+                        <!-- Brazil -->
+                        <div class="bg-[#009b3a] relative flex items-center justify-center">
+                            <div class="w-4 h-2.5 bg-[#fedf00] rotate-45 flex items-center justify-center">
+                                <div class="w-1.5 h-1.5 rounded-full bg-[#002776]"></div>
+                            </div>
+                        </div>
+                        <!-- Germany -->
+                        <div class="flex flex-col">
+                            <div class="flex-1 bg-black"></div>
+                            <div class="flex-1 bg-[#DD0000]"></div>
+                            <div class="flex-1 bg-[#FFCE00]"></div>
+                        </div>
+                        <!-- France / Canada indicator -->
+                        <div class="flex">
+                            <div class="flex-1 bg-[#002395]"></div>
+                            <div class="flex-1 bg-white"></div>
+                            <div class="flex-1 bg-[#ED2939]"></div>
+                        </div>
+                    </button>
+
+                    <!-- Trophy Button -->
+                    <button id="btn-trophy" class="btn-bronze btn-bronze-lg" title="Trophy Room">
+                        <svg class="w-10 h-10 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- SCREEN 2: WORLD MAP SCREEN (Matches Image 2)          -->
+    <!-- ===================================================== -->
+    <div id="screen-map" class="grunge-bg hidden-screen">
+        <div class="grunge-noise"></div>
+        <div class="screen-content">
+            <!-- Top Row: Sound Toggle -->
+            <div class="w-full flex justify-end items-center">
+                <button class="btn-bronze btn-sound-toggle" title="Toggle Sound">
+                    <svg class="w-7 h-7 sound-on-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                    <svg class="w-7 h-7 sound-off-icon hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+                </button>
+            </div>
+
+            <!-- Center Interactive World Map -->
+            <div class="relative w-full max-w-4xl aspect-[16/9] max-h-[68vh] flex items-center justify-center my-auto">
+                <svg viewBox="0 0 900 500" class="w-full h-full drop-shadow-[0_10px_18px_rgba(0,0,0,0.55)]">
+                    <defs>
+                        <!-- Dotted Green Pattern for Continents matching screenshot -->
+                        <linearGradient id="continentBase" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#84cc16"/>
+                            <stop offset="50%" stop-color="#4d7c0f"/>
+                            <stop offset="100%" stop-color="#65a30d"/>
+                        </linearGradient>
+                        <radialGradient id="desertGlow" cx="50%" cy="50%" r="50%">
+                            <stop offset="0%" stop-color="#facc15" stop-opacity="0.75"/>
+                            <stop offset="100%" stop-color="#4d7c0f" stop-opacity="0"/>
+                        </radialGradient>
+                        <pattern id="dotGrid" width="8" height="8" patternUnits="userSpaceOnUse">
+                            <circle cx="4" cy="4" r="2.2" fill="rgba(255,255,255,0.22)"/>
+                            <circle cx="4" cy="4" r="1.2" fill="rgba(0,0,0,0.18)"/>
+                        </pattern>
+                    </defs>
+
+                    <!-- Continents Group -->
+                    <g stroke="#1a2e05" stroke-width="2.5" stroke-linejoin="round">
+                        <!-- North America -->
+                        <path d="M135,105 L185,95 L230,72 L285,82 L310,115 L295,140 L325,165 L285,195 L265,245 L245,250 L215,215 L195,165 L145,140 Z" fill="url(#continentBase)"/>
+                        <!-- Greenland -->
+                        <path d="M305,65 L365,55 L395,75 L355,130 L325,115 Z" fill="#a3e635"/>
+                        <!-- South America -->
+                        <path d="M265,245 L315,255 L355,295 L335,365 L300,425 L285,415 L285,345 L260,290 Z" fill="url(#continentBase)"/>
+                        <!-- Europe -->
+                        <path d="M405,155 L430,115 L485,100 L525,115 L520,175 L475,195 L445,185 L410,195 Z" fill="url(#continentBase)"/>
+                        <!-- Africa -->
+                        <path d="M415,205 L475,205 L535,235 L520,305 L485,375 L455,365 L440,300 L395,275 L395,230 Z" fill="url(#continentBase)"/>
+                        <!-- Asia -->
+                        <path d="M515,115 L605,80 L725,110 L750,135 L695,185 L675,235 L625,275 L595,235 L560,265 L525,215 L510,165 Z" fill="url(#continentBase)"/>
+                        <!-- Australia & Indonesia -->
+                        <path d="M625,315 L685,305 L710,355 L685,385 L635,370 Z" fill="url(#continentBase)"/>
+                        <!-- New Zealand & Madagascar -->
+                        <path d="M510,325 L522,318 L518,350 L506,348 Z" fill="url(#continentBase)"/>
+                        <path d="M725,375 L738,368 L728,398 L716,392 Z" fill="url(#continentBase)"/>
+                    </g>
+
+                    <!-- Dotted Pixel Pattern Overlay on Continents -->
+                    <g pointer-events="none" opacity="0.85">
+                        <path d="M135,105 L185,95 L230,72 L285,82 L310,115 L295,140 L325,165 L285,195 L265,245 L245,250 L215,215 L195,165 L145,140 Z" fill="url(#dotGrid)"/>
+                        <path d="M265,245 L315,255 L355,295 L335,365 L300,425 L285,415 L285,345 L260,290 Z" fill="url(#dotGrid)"/>
+                        <path d="M405,155 L430,115 L485,100 L525,115 L520,175 L475,195 L445,185 L410,195 Z" fill="url(#dotGrid)"/>
+                        <path d="M415,205 L475,205 L535,235 L520,305 L485,375 L455,365 L440,300 L395,275 L395,230 Z" fill="url(#dotGrid)"/>
+                        <path d="M515,115 L605,80 L725,110 L750,135 L695,185 L675,235 L625,275 L595,235 L560,265 L525,215 L510,165 Z" fill="url(#dotGrid)"/>
+                        <path d="M625,315 L685,305 L710,355 L685,385 L635,370 Z" fill="url(#dotGrid)"/>
+                    </g>
+
+                    <!-- Dashed World Tour Route Path -->
+                    <path d="M240,125 Q185,175 280,205 Q235,290 295,335 Q255,445 345,420 Q410,340 465,295 Q340,220 410,130 Q435,50 480,105 Q505,145 500,175 Q520,210 560,225 Q540,310 630,320 Q605,240 655,190 Q540,140 595,115" 
+                          fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="3.5" stroke-dasharray="9,7" stroke-linecap="round"/>
+                </svg>
+
+                <!-- Dynamic HTML Node Pins Overlay -->
+                <div id="map-nodes-container" class="absolute inset-0"></div>
+            </div>
+
+            <!-- Bottom Row: Back Button & Play Button -->
+            <div class="w-full flex justify-center items-end relative">
+                <button id="btn-map-back" class="btn-bronze absolute left-0 bottom-0" title="Back to Title">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                </button>
+
+                <button id="btn-map-play" class="btn-yellow-play" title="Select Stage">
+                    <div class="play-triangle"></div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- SCREEN 3: MATCHUP VS SCREEN (Matches Image 3)         -->
+    <!-- ===================================================== -->
+    <div id="screen-vs" class="grunge-bg hidden-screen">
+        <div class="grunge-noise"></div>
+        <div class="screen-content">
+            <!-- Top Row: Left Silver Trophy (1/6) & Right Sound Toggle -->
+            <div class="w-full flex justify-between items-start">
+                <div class="flex flex-col items-center">
+                    <!-- Silver Cup SVG -->
+                    <svg class="w-16 h-16 md:w-20 md:h-20 drop-shadow-[0_6px_8px_rgba(0,0,0,0.5)]" viewBox="0 0 64 64">
+                        <defs>
+                            <linearGradient id="silverCup" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#94a3b8"/>
+                                <stop offset="35%" stop-color="#f8fafc"/>
+                                <stop offset="70%" stop-color="#64748b"/>
+                                <stop offset="100%" stop-color="#cbd5e1"/>
+                            </linearGradient>
+                        </defs>
+                        <path d="M18,10 H46 V24 C46,35 38,42 32,44 C26,42 18,35 18,24 Z" fill="url(#silverCup)"/>
+                        <path d="M18,14 H10 C10,24 14,30 20,32" fill="none" stroke="url(#silverCup)" stroke-width="3.5"/>
+                        <path d="M46,14 H54 C54,24 50,30 44,32" fill="none" stroke="url(#silverCup)" stroke-width="3.5"/>
+                        <rect x="29" y="43" width="6" height="10" fill="url(#silverCup)"/>
+                        <rect x="21" y="53" width="22" height="5" rx="2" fill="#475569"/>
+                    </svg>
+                    <span id="vs-match-progress" class="font-serif font-bold text-2xl md:text-3xl text-[#fde047] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] -mt-1">1/6</span>
+                </div>
+
+                <button class="btn-bronze btn-sound-toggle" title="Toggle Sound">
+                    <svg class="w-7 h-7 sound-on-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                    <svg class="w-7 h-7 sound-off-icon hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+                </button>
+            </div>
+
+            <!-- Center Stage Number + Crossed Paddles + Flags -->
+            <div class="flex flex-col items-center justify-center -mt-8">
+                <div class="relative flex justify-center items-center">
+                    <canvas id="vs-paddles-canvas" width="320" height="220" class="w-[240px] h-[165px] md:w-[290px] md:h-[200px] drop-shadow-[0_12px_18px_rgba(0,0,0,0.55)]"></canvas>
+                    <div id="vs-stage-title" class="absolute -top-6 title-main !text-7xl md:!text-8xl select-none">#1</div>
+                </div>
+
+                <!-- Flag VS Flag Row -->
+                <div class="flex items-center gap-6 md:gap-10 mt-2">
+                    <div id="vs-player-flag" class="vs-flag"></div>
+                    <div class="title-main !text-5xl md:!text-7xl">VS</div>
+                    <div id="vs-ai-flag" class="vs-flag"></div>
+                </div>
+                <div id="vs-country-names" class="text-blue-100 font-semibold tracking-widest uppercase text-sm md:text-base mt-2 opacity-90">
+                    CANADA VS ICELAND
+                </div>
+            </div>
+
+            <!-- Bottom Row: Back Button & Play Button -->
+            <div class="w-full flex justify-center items-end relative">
+                <button id="btn-vs-back" class="btn-bronze absolute left-0 bottom-0" title="Back to Map">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                </button>
+
+                <button id="btn-vs-play" class="btn-yellow-play" title="Start Match">
+                    <div class="play-triangle"></div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- SCREEN 4: GAMEPLAY HUD OVERLAY (Matches Image 4)      -->
+    <!-- ===================================================== -->
+    <div id="hud-layer" class="hidden-screen">
+        <!-- Top Flip-Card Scoreboard -->
+        <div class="scoreboard-bar">
+            <div id="hud-player-flag" class="hud-flag"></div>
+            <div id="hud-score-player" class="flip-card">0</div>
+            <div id="hud-score-ai" class="flip-card">0</div>
+            <div id="hud-ai-flag" class="hud-flag"></div>
+        </div>
+
+        <!-- Top Right Pause & Sound Buttons -->
+        <div class="absolute top-4 right-5 flex items-center gap-3 pointer-events-auto">
+            <button id="btn-pause" class="btn-bronze" title="Pause Match">
+                <div class="flex gap-1.5">
+                    <div class="w-2 h-6 bg-white rounded-sm shadow"></div>
+                    <div class="w-2 h-6 bg-white rounded-sm shadow"></div>
+                </div>
+            </button>
+            <button class="btn-bronze btn-sound-toggle" title="Toggle Sound">
+                <svg class="w-7 h-7 sound-on-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                <svg class="w-7 h-7 sound-off-icon hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+            </button>
+        </div>
+
+        <!-- Subtle Serve / Status Prompt -->
+        <div id="serve-prompt" class="absolute bottom-12 left-1/2 -translate-x-1/2 bg-black/55 text-white px-6 py-2 rounded-full font-bold tracking-widest uppercase text-sm md:text-base border border-white/25 backdrop-blur-sm transition-opacity duration-200">
+            SWIPE OR CLICK TO SERVE
+        </div>
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- PAUSE / RESULT / INFO MODALS                          -->
+    <!-- ===================================================== -->
+    <div id="modal-container" class="modal-backdrop hidden-screen">
+        <div class="bg-gradient-to-b from-[#35598f] to-[#1e3557] border-4 border-[#93c5fd] rounded-3xl p-8 max-w-md w-full text-center shadow-2xl text-white relative">
+            <h2 id="modal-title" class="title-main !text-5xl mb-3">PAUSED</h2>
+            <p id="modal-body" class="text-blue-100 text-base mb-6 leading-relaxed"></p>
+            <div id="modal-actions" class="flex flex-wrap justify-center gap-4"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // =========================================================================
+    // 1. SOUND SYNTHESIZER (Web Audio API - Realistic Ping Pong Acoustics)
+    // =========================================================================
+    class SoundEngine {
+        constructor() {
+            this.ctx = null;
+            this.enabled = true;
+        }
+
+        init() {
+            if (!this.ctx) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) this.ctx = new AudioCtx();
+            }
+            if (this.ctx && this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+        }
+
+        playPaddleHit(power = 1) {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+
+            const now = this.ctx.currentTime;
+            // crisp "tok" sound
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            const baseFreq = 260 + Math.min(180, power * 12);
+            osc.frequency.setValueAtTime(baseFreq, now);
+            osc.frequency.exponentialRampToValueAtTime(95, now + 0.055);
+
+            gain.gain.setValueAtTime(0.45, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.06);
+        }
+
+        playTableBounce() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+
+            const now = this.ctx.currentTime;
+            // higher pitched hollow "ping"
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(520, now);
+            osc.frequency.exponentialRampToValueAtTime(340, now + 0.04);
+
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.05);
+        }
+
+        playNetHit() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(120, now);
+            osc.frequency.linearRampToValueAtTime(65, now + 0.08);
+
+            gain.gain.setValueAtTime(0.18, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.09);
+        }
+
+        playClick() {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, now);
+            osc.frequency.exponentialRampToValueAtTime(900, now + 0.04);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.05);
+        }
+
+        playPoint(won) {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(won ? 440 : 300, now);
+            osc.frequency.setValueAtTime(won ? 587.33 : 220, now + 0.1);
+            gain.gain.setValueAtTime(0.25, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.3);
+        }
+    }
+
+    const sfx = new SoundEngine();
+
+    // =========================================================================
+    // 2. WORLD TOUR COUNTRIES & SVG FLAG RENDERER
+    // =========================================================================
+    const PLAYER_COUNTRIES = [
+        { code: 'CA', name: 'Canada' },
+        { code: 'GB', name: 'United Kingdom' },
+        { code: 'BR', name: 'Brazil' },
+        { code: 'DE', name: 'Germany' },
+        { code: 'FR', name: 'France' }
+    ];
+
+    const TOUR_STAGES = [
+        { id: 1, code: 'IS', name: 'Iceland',      x: 31.0, y: 22.5, speed: 0.72, error: 1.15 },
+        { id: 2, code: 'US', name: 'USA',          x: 35.0, y: 38.5, speed: 0.78, error: 0.95 },
+        { id: 3, code: 'BR', name: 'Brazil',       x: 36.2, y: 63.0, speed: 0.83, error: 0.85 },
+        { id: 4, code: 'ZA', name: 'South Africa', x: 51.5, y: 55.5, speed: 0.88, error: 0.75 },
+        { id: 5, code: 'GB', name: 'UK',           x: 45.8, y: 23.5, speed: 0.92, error: 0.65 },
+        { id: 6, code: 'DE', name: 'Germany',      x: 54.4, y: 30.5, speed: 0.97, error: 0.55 },
+        { id: 7, code: 'IN', name: 'India',        x: 59.5, y: 41.2, speed: 1.03, error: 0.45 },
+        { id: 8, code: 'AU', name: 'Australia',    x: 66.5, y: 60.0, speed: 1.08, error: 0.38 },
+        { id: 9, code: 'JP', name: 'Japan',        x: 68.8, y: 34.5, speed: 1.14, error: 0.28 },
+        { id: 10, code: 'CN', name: 'China',       x: 63.8, y: 20.8, speed: 1.22, error: 0.18 }
+    ];
+
+    let playerCountryIndex = 0; // Default: Canada (matches Screenshot 3 & 4)
+    let unlockedStage = 1;
+    let selectedStage = 1;
+
+    function getFlagSVG(code) {
+        switch (code) {
+            case 'CA': // Canada
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="80" fill="#ff0000"/>
+                    <rect x="30" width="60" height="80" fill="#ffffff"/>
+                    <path d="M60,16 L64,27 L71,24 L67,35 L77,35 L74,40 L81,46 L67,48 L69,55 L61,53 L61,66 L59,66 L59,53 L51,55 L53,48 L39,46 L46,40 L43,35 L53,35 L49,24 L56,27 Z" fill="#ff0000"/>
+                </svg>`;
+            case 'IS': // Iceland
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="80" fill="#02529C"/>
+                    <rect x="32" width="18" height="80" fill="#ffffff"/>
+                    <rect y="31" width="120" height="18" fill="#ffffff"/>
+                    <rect x="36" width="10" height="80" fill="#DC1E35"/>
+                    <rect y="35" width="120" height="10" fill="#DC1E35"/>
+                </svg>`;
+            case 'US': // USA
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="80" fill="#B22234"/>
+                    <path d="M0,12 H120 M0,24 H120 M0,36 H120 M0,48 H120 M0,60 H120 M0,72 H120" stroke="#fff" stroke-width="6"/>
+                    <rect width="52" height="42" fill="#3C3B6E"/>
+                    <circle cx="13" cy="11" r="2.5" fill="#fff"/><circle cx="26" cy="11" r="2.5" fill="#fff"/><circle cx="39" cy="11" r="2.5" fill="#fff"/>
+                    <circle cx="19" cy="21" r="2.5" fill="#fff"/><circle cx="32" cy="21" r="2.5" fill="#fff"/>
+                    <circle cx="13" cy="31" r="2.5" fill="#fff"/><circle cx="26" cy="31" r="2.5" fill="#fff"/><circle cx="39" cy="31" r="2.5" fill="#fff"/>
+                </svg>`;
+            case 'BR': // Brazil
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="80" fill="#009b3a"/>
+                    <polygon points="60,10 110,40 60,70 10,40" fill="#fedf00"/>
+                    <circle cx="60" cy="40" r="16" fill="#002776"/>
+                    <path d="M45,36 Q60,30 75,42" fill="none" stroke="#ffffff" stroke-width="3"/>
+                </svg>`;
+            case 'ZA': // South Africa
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="40" fill="#E03C31"/>
+                    <rect y="40" width="120" height="40" fill="#001489"/>
+                    <path d="M0,0 L45,40 L0,80" fill="#000000" stroke="#FFB81C" stroke-width="6"/>
+                    <path d="M0,10 L38,40 L0,70 M38,40 H120" fill="none" stroke="#ffffff" stroke-width="20"/>
+                    <path d="M0,10 L38,40 L0,70 M38,40 H120" fill="none" stroke="#007749" stroke-width="12"/>
+                </svg>`;
+            case 'GB': // UK
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="80" fill="#012169"/>
+                    <path d="M0,0 L120,80 M120,0 L0,80" stroke="#ffffff" stroke-width="14"/>
+                    <path d="M0,0 L120,80 M120,0 L0,80" stroke="#C8102E" stroke-width="6"/>
+                    <path d="M60,0 V80 M0,40 H120" stroke="#ffffff" stroke-width="22"/>
+                    <path d="M60,0 V80 M0,40 H120" stroke="#C8102E" stroke-width="12"/>
+                </svg>`;
+            case 'DE': // Germany
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="27" fill="#000000"/>
+                    <rect y="27" width="120" height="26" fill="#DD0000"/>
+                    <rect y="53" width="120" height="27" fill="#FFCE00"/>
+                </svg>`;
+            case 'FR': // France
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="40" height="80" fill="#002395"/>
+                    <rect x="40" width="40" height="80" fill="#ffffff"/>
+                    <rect x="80" width="40" height="80" fill="#ED2939"/>
+                </svg>`;
+            case 'IN': // India
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="27" fill="#FF9933"/>
+                    <rect y="27" width="120" height="26" fill="#ffffff"/>
+                    <rect y="53" width="120" height="27" fill="#138808"/>
+                    <circle cx="60" cy="40" r="10" fill="none" stroke="#000080" stroke-width="2"/>
+                    <circle cx="60" cy="40" r="2" fill="#000080"/>
+                </svg>`;
+            case 'AU': // Australia
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="80" fill="#00008B"/>
+                    <rect width="54" height="40" fill="#012169"/>
+                    <path d="M0,0 L54,40 M54,0 L0,40" stroke="#fff" stroke-width="6"/>
+                    <path d="M27,0 V40 M0,20 H54" stroke="#fff" stroke-width="10"/>
+                    <path d="M27,0 V40 M0,20 H54" stroke="#C8102E" stroke-width="5"/>
+                    <circle cx="27" cy="60" r="5" fill="#fff"/>
+                    <circle cx="90" cy="22" r="3.5" fill="#fff"/><circle cx="78" cy="36" r="3.5" fill="#fff"/>
+                    <circle cx="100" cy="38" r="3.5" fill="#fff"/><circle cx="88" cy="58" r="3.5" fill="#fff"/>
+                </svg>`;
+            case 'JP': // Japan
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="80" fill="#ffffff"/>
+                    <circle cx="60" cy="40" r="22" fill="#BC002D"/>
+                </svg>`;
+            case 'CN': // China
+            default:
+                return `<svg viewBox="0 0 120 80" class="w-full h-full">
+                    <rect width="120" height="80" fill="#EE1C25"/>
+                    <polygon points="24,14 27,23 36,23 29,28 32,37 24,31 16,37 19,28 12,23 21,23" fill="#FFFF00"/>
+                    <circle cx="44" cy="14" r="3" fill="#FFFF00"/><circle cx="50" cy="22" r="3" fill="#FFFF00"/>
+                    <circle cx="50" cy="32" r="3" fill="#FFFF00"/><circle cx="44" cy="40" r="3" fill="#FFFF00"/>
+                </svg>`;
+        }
+    }
+
+    // =========================================================================
+    // 3. HIGH-DENSITY MICRO-PIXEL PROCEDURAL TEXTURE GENERATORS
+    // =========================================================================
+
+    // Generates a realistic painted blue grunge noise pattern for UI screens
+    function initGrungeOverlays() {
+        const c = document.createElement('canvas');
+        c.width = 256;
+        c.height = 256;
+        const ctx = c.getContext('2d');
+        const imgData = ctx.createImageData(256, 256);
+        const data = imgData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const v = Math.floor(Math.random() * 255);
+            data[i] = v;
+            data[i + 1] = v;
+            data[i + 2] = v;
+            data[i + 3] = 65;
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        // Add subtle brushed scratches
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        for (let i = 0; i < 60; i++) {
+            ctx.beginPath();
+            ctx.moveTo(Math.random() * 256, Math.random() * 256);
+            ctx.lineTo(Math.random() * 256, Math.random() * 256);
+            ctx.stroke();
+        }
+
+        const url = `url(${c.toDataURL()})`;
+        document.querySelectorAll('.grunge-noise').forEach(el => {
+            el.style.backgroundImage = url;
+        });
+    }
+
+    // Draws the crossed Red & Green Paddles on Title and VS Screens with micro-pixel rubber pimples
+    function drawCrossedPaddles(canvasId, includeBall) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        function drawSinglePaddle(cx, cy, angle, rubberColor, rubberDark, inlayColor) {
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(angle);
+
+            // Drop shadow
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 12;
+            ctx.shadowOffsetX = 4;
+            ctx.shadowOffsetY = 8;
+
+            // Dark sponge/neck base
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath();
+            ctx.arc(0, -18, 66, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Rubber head
+            const grad = ctx.createRadialGradient(-18, -35, 10, 0, -18, 68);
+            grad.addColorStop(0, rubberColor);
+            grad.addColorStop(1, rubberDark);
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(0, -20, 65, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Reset shadow for micro-pixel pimples
+            ctx.shadowColor = 'transparent';
+
+            // Micro-pixel rubber pimple grid
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(0, -20, 63, 0, Math.PI * 2);
+            ctx.clip();
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+            for (let x = -64; x <= 64; x += 3) {
+                for (let y = -84; y <= 44; y += 3) {
+                    ctx.fillRect(x, y, 1.4, 1.4);
+                }
+            }
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.09)';
+            for (let x = -64; x <= 64; x += 3) {
+                for (let y = -84; y <= 44; y += 3) {
+                    ctx.fillRect(x + 1, y + 1, 1, 1);
+                }
+            }
+            ctx.restore();
+
+            // Flared wooden handle
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+            ctx.shadowBlur = 8;
+            const handleGrad = ctx.createLinearGradient(-14, 30, 14, 30);
+            handleGrad.addColorStop(0, '#a67c52');
+            handleGrad.addColorStop(0.5, '#e2b887');
+            handleGrad.addColorStop(1, '#8c6239');
+            ctx.fillStyle = handleGrad;
+
+            ctx.beginPath();
+            ctx.moveTo(-11, 34);
+            ctx.lineTo(11, 34);
+            ctx.lineTo(15, 98);
+            ctx.quadraticCurveTo(0, 104, -15, 98);
+            ctx.closePath();
+            ctx.fill();
+
+            // Colored handle inlay stripe (matches reference image)
+            ctx.shadowColor = 'transparent';
+            ctx.fillStyle = inlayColor;
+            ctx.beginPath();
+            ctx.roundRect(-6, 46, 12, 42, 4);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // Draw Green Paddle (Right, tilted left)
+        drawSinglePaddle(205, 105, 0.62, '#4d7c4d', '#284e28', '#2f6f3e');
+        // Draw Red Paddle (Left, tilted right, overlapping handle)
+        drawSinglePaddle(135, 105, -0.62, '#d64541', '#8f2421', '#c0392b');
+
+        // Draw 3-Star Yellow Ping Pong Ball on the Red Paddle
+        if (includeBall) {
+            const bx = 148, by = 68, br = 18;
+            ctx.save();
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 3;
+            ctx.shadowOffsetY = 5;
+
+            const ballGrad = ctx.createRadialGradient(bx - 6, by - 6, 2, bx, by, br);
+            ballGrad.addColorStop(0, '#fef9c3');
+            ballGrad.addColorStop(0.45, '#fde047');
+            ballGrad.addColorStop(1, '#ca8a04');
+
+            ctx.fillStyle = ballGrad;
+            ctx.beginPath();
+            ctx.arc(bx, by, br, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Tiny red stamp emblem on ball
+            ctx.shadowColor = 'transparent';
+            ctx.strokeStyle = 'rgba(185, 28, 28, 0.65)';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(bx + 2, by - 2, 5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    // 3D Table Surface Texture: Fine-pixel matte green with crisp regulation white lines
+    function createTableTopTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 2048;
+        const ctx = canvas.getContext('2d');
+
+        // Rich vibrant green matching screenshot 4
+        const grad = ctx.createRadialGradient(512, 1024, 100, 512, 1024, 1200);
+        grad.addColorStop(0, '#229944');
+        grad.addColorStop(0.6, '#158035');
+        grad.addColorStop(1, '#0f6828');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 1024, 2048);
+
+        // Micro-pixel matte grain using ImageData
+        const imgData = ctx.getImageData(0, 0, 1024, 2048);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const noise = (Math.random() - 0.5) * 14;
+            data[i] = Math.min(255, Math.max(0, data[i] + noise));
+            data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+            data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        // Crisp White Borders & Center Line
+        ctx.fillStyle = '#f8fafc';
+        const border = 24;
+        ctx.fillRect(0, 0, 1024, border);             // Far baseline
+        ctx.fillRect(0, 2048 - border, 1024, border); // Near baseline
+        ctx.fillRect(0, 0, border, 2048);             // Left sideline
+        ctx.fillRect(1024 - border, 0, border, 2048); // Right sideline
+        ctx.fillRect(512 - 6, 0, 12, 2048);           // Center service line
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.anisotropy = 8;
+        return tex;
+    }
+
+    // 3D Paddle Rubber Micro-Pixel Texture
+    function createPaddleRubberTexture(baseHex, darkHex) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        const grad = ctx.createRadialGradient(200, 180, 30, 256, 256, 260);
+        grad.addColorStop(0, baseHex);
+        grad.addColorStop(1, darkHex);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 512, 512);
+
+        // High-density micro-pixel pimple array
+        for (let x = 0; x < 512; x += 4) {
+            for (let y = 0; y < 512; y += 4) {
+                ctx.fillStyle = 'rgba(0,0,0,0.22)';
+                ctx.fillRect(x, y, 2, 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                ctx.fillRect(x + 1, y + 1, 1, 1);
+            }
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.anisotropy = 4;
+        return tex;
+    }
+
+    // 3D Hardwood Parquet Gym Floor Texture (Matches Screenshot 4)
+    function createGymFloorTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 1024;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = '#b9834f';
+        ctx.fillRect(0, 0, 1024, 1024);
+
+        const plankRows = 32;
+        const plankCols = 8;
+        const rowH = 1024 / plankRows;
+        const colW = 1024 / plankCols;
+
+        for (let r = 0; r < plankRows; r++) {
+            const offset = (r % 2) * (colW / 2);
+            for (let c = -1; c <= plankCols; c++) {
+                const x = c * colW + offset;
+                const y = r * rowH;
+
+                // Subtle wood tone variation per plank
+                const tone = (Math.random() - 0.5) * 22;
+                const R = Math.min(255, Math.max(0, 186 + tone));
+                const G = Math.min(255, Math.max(0, 130 + tone * 0.8));
+                const B = Math.min(255, Math.max(0, 76 + tone * 0.5));
+                ctx.fillStyle = `rgb(${R},${G},${B})`;
+                ctx.fillRect(x, y, colW, rowH);
+
+                // Wood grain streaks
+                ctx.fillStyle = 'rgba(90, 48, 15, 0.12)';
+                for (let g = 0; g < 5; g++) {
+                    ctx.fillRect(x + Math.random() * colW, y + Math.random() * rowH, Math.random() * 60 + 20, 1.5);
+                }
+
+                // Plank seam
+                ctx.strokeStyle = 'rgba(70, 35, 10, 0.32)';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(x, y, colW, rowH);
+            }
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(4, 4);
+        tex.anisotropy = 8;
+        return tex;
+    }
+
+    // 3D Back Gymnasium Slatted Wood Wall with Doorway & Gym Bars (Matches Screenshot 4)
+    function createGymBackWallTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 2048;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        // Warm honey wood background
+        const wallGrad = ctx.createLinearGradient(0, 0, 0, 512);
+        wallGrad.addColorStop(0, '#c6935b');
+        wallGrad.addColorStop(1, '#d8a671');
+        ctx.fillStyle = wallGrad;
+        ctx.fillRect(0, 0, 2048, 512);
+
+        // Horizontal wood slat lines
+        for (let y = 0; y < 512; y += 10) {
+            ctx.fillStyle = y % 20 === 0 ? 'rgba(110, 62, 22, 0.25)' : 'rgba(255, 225, 185, 0.12)';
+            ctx.fillRect(0, y, 2048, 3);
+        }
+
+        // Vertical wall panel seams and pillars
+        const pillars = [420, 880, 1360, 1780];
+        pillars.forEach(px => {
+            ctx.fillStyle = '#9e6b3b';
+            ctx.fillRect(px - 6, 0, 12, 130);
+            ctx.fillStyle = '#2d1c0e';
+            ctx.fillRect(px - 14, 120, 28, 22); // dark mounting brackets matching screenshot
+            ctx.strokeStyle = 'rgba(80, 42, 12, 0.35)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(px, 0);
+            ctx.lineTo(px, 512);
+            ctx.stroke();
+        });
+
+        // Left Dark Recessed Gymnasium Entrance & Glass Hallway (Matches left side of Screenshot 4)
+        ctx.fillStyle = '#141210';
+        ctx.fillRect(0, 25, 310, 487);
+        // Inner hallway glass door frame
+        ctx.fillStyle = '#7c766d';
+        ctx.fillRect(175, 45, 115, 455);
+        ctx.fillStyle = '#3b3732';
+        ctx.fillRect(185, 55, 95, 90);
+        ctx.fillStyle = '#57514a';
+        ctx.fillRect(185, 160, 95, 330);
+        // Tiny hallway stand inside glass
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(255, 460);
+        ctx.lineTo(255, 355);
+        ctx.moveTo(240, 460);
+        ctx.lineTo(270, 460);
+        ctx.stroke();
+
+        // Right Wall Wooden Stall Bars / Gym Ladder (Matches top-right of Screenshot 4)
+        const ladderX = 1560;
+        const ladderW = 210;
+        const ladderH = 145;
+        ctx.strokeStyle = 'rgba(60, 30, 8, 0.55)';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(ladderX, 5, ladderW, ladderH);
+        for (let ry = 20; ry <= ladderH; ry += 20) {
+            ctx.fillStyle = '#d49b62';
+            ctx.fillRect(ladderX, ry, ladderW, 6);
+            ctx.fillStyle = 'rgba(50, 22, 5, 0.45)';
+            ctx.fillRect(ladderX, ry + 6, ladderW, 4);
+        }
+
+        // Baseboard along bottom of wall
+        ctx.fillStyle = '#784920';
+        ctx.fillRect(310, 495, 1738, 17);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.anisotropy = 8;
+        return tex;
+    }
+
+    // =========================================================================
+    // 4. THREE.JS 3D GYMNASIUM & TABLE TENNIS ENGINE
+    // =========================================================================
+    const WINNING_SCORE = 11;
+    let gameState = 'MENU'; // MENU, SERVING, PLAYING, POINT_DELAY, PAUSED
+
+    let scene, camera, renderer;
+    let tableGroup, playerPaddle, aiPaddle, ball, ballShadow, bounceRing;
+
+    // Regulation Table Proportions
+    const tableWidth = 15.25;
+    const tableLength = 27.4;
+    const tableThickness = 0.65;
+    const paddleRadius = 1.65;
+    const ballRadius = 0.28;
+
+    // Ball Physics State
+    let ballVel = new THREE.Vector3();
+    let ballSpin = 0; // Horizontal Magnus curve
+    let prevBallPos = new THREE.Vector3();
+    const gravity = -34.0;
+
+    // Player Paddle Input & Velocity Tracking
+    let pointerNorm = new THREE.Vector2(0, 0);
+    let isTouchActive = false;
+    let paddleTarget = new THREE.Vector3(0, 2.2, tableLength / 2 + 1.2);
+    let prevPaddlePos = new THREE.Vector3(0, 2.2, tableLength / 2 + 1.2);
+    let paddleVel = new THREE.Vector3();
+    let hitCooldown = 0;
+
+    // Match State
+    let scorePlayer = 0;
+    let scoreAi = 0;
+    let totalPointsPlayed = 0;
+    let playerServing = true;
+    let bouncesOnCurrentSide = 0;
+    let lastHitter = 'NONE'; // 'PLAYER' or 'AI'
+
+    const clock = new THREE.Clock();
+
+    function init3DScene() {
+        const canvas = document.getElementById('webgl-canvas');
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x8c5a32);
+        scene.fog = new THREE.Fog(0x7c4d25, 38, 95);
+
+        // Camera angle carefully matched to Screenshot 4
+        camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 150);
+        camera.position.set(0, 10.2, 26.8);
+        camera.lookAt(0, 0.4, -2.5);
+
+        // --- Warm Gymnasium Lighting ---
+        const hemiLight = new THREE.HemisphereLight(0xfff7ed, 0x7c4a21, 0.78);
+        scene.add(hemiLight);
+
+        const mainSpot = new THREE.SpotLight(0xfffbeb, 0.95);
+        mainSpot.position.set(0, 28, 6);
+        mainSpot.angle = Math.PI / 2.2;
+        mainSpot.penumbra = 0.55;
+        mainSpot.castShadow = true;
+        mainSpot.shadow.mapSize.width = 2048;
+        mainSpot.shadow.mapSize.height = 2048;
+        mainSpot.shadow.camera.near = 8;
+        mainSpot.shadow.camera.far = 45;
+        mainSpot.shadow.bias = -0.0005;
+        scene.add(mainSpot);
+
+        // Floor Specular Reflection Light (creates the warm overhead gym reflections on floor)
+        const hallLightLeft = new THREE.PointLight(0xffedd5, 0.45, 65);
+        hallLightLeft.position.set(-16, 12, -12);
+        scene.add(hallLightLeft);
+
+        const hallLightRight = new THREE.PointLight(0xffedd5, 0.45, 65);
+        hallLightRight.position.set(16, 12, -12);
+        scene.add(hallLightRight);
+
+        // --- 1. Gymnasium Hardwood Floor ---
+        const floorGeo = new THREE.PlaneGeometry(130, 110);
+        const floorMat = new THREE.MeshStandardMaterial({
+            map: createGymFloorTexture(),
+            roughness: 0.26,
+            metalness: 0.08
+        });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -5.6;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // --- 2. Gymnasium Slatted Back Wall ---
+        const wallGeo = new THREE.PlaneGeometry(92, 23);
+        const wallMat = new THREE.MeshStandardMaterial({
+            map: createGymBackWallTexture(),
+            roughness: 0.65,
+            metalness: 0.05
+        });
+        const backWall = new THREE.Mesh(wallGeo, wallMat);
+        backWall.position.set(0, 5.9, -28);
+        backWall.receiveShadow = true;
+        scene.add(backWall);
+
+        // --- 3. Regulation Table Tennis Table (with Grey Metallic Apron & Black Legs) ---
+        tableGroup = new THREE.Group();
+
+        // Green Playing Surface
+        const topGeo = new THREE.BoxGeometry(tableWidth, 0.25, tableLength);
+        const topMat = new THREE.MeshStandardMaterial({
+            map: createTableTopTexture(),
+            roughness: 0.35,
+            metalness: 0.05
+        });
+        const tableTopMesh = new THREE.Mesh(topGeo, topMat);
+        tableTopMesh.position.y = 0;
+        tableTopMesh.receiveShadow = true;
+        tableTopMesh.castShadow = true;
+        tableGroup.add(tableTopMesh);
+
+        // Metallic Grey Apron Rim (Matches the thick grey front edge in Screenshot 4)
+        const apronMat = new THREE.MeshStandardMaterial({
+            color: 0x6b7280,
+            roughness: 0.4,
+            metalness: 0.5
+        });
+        const apronDarkMat = new THREE.MeshStandardMaterial({
+            color: 0x1f2937,
+            roughness: 0.6
+        });
+
+        const frontApron = new THREE.Mesh(new THREE.BoxGeometry(tableWidth + 0.16, 0.55, 0.35), apronMat);
+        frontApron.position.set(0, -0.22, tableLength / 2 + 0.08);
+        tableGroup.add(frontApron);
+
+        const backApron = new THREE.Mesh(new THREE.BoxGeometry(tableWidth + 0.16, 0.55, 0.35), apronMat);
+        backApron.position.set(0, -0.22, -tableLength / 2 - 0.08);
+        tableGroup.add(backApron);
+
+        const leftApron = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.55, tableLength), apronMat);
+        leftApron.position.set(-tableWidth / 2 - 0.05, -0.22, 0);
+        tableGroup.add(leftApron);
+
+        const rightApron = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.55, tableLength), apronMat);
+        rightApron.position.set(tableWidth / 2 + 0.05, -0.22, 0);
+        tableGroup.add(rightApron);
+
+        // Black Square Table Legs (Positioned like Screenshot 4)
+        const legGeo = new THREE.BoxGeometry(0.65, 5.4, 0.65);
+        const legMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+        const legOffsets = [
+            [-tableWidth / 2 + 2.1, -2.8, tableLength / 2 - 1.5],
+            [tableWidth / 2 - 2.1, -2.8, tableLength / 2 - 1.5],
+            [-tableWidth / 2 + 2.1, -2.8, -tableLength / 2 + 2.5],
+            [tableWidth / 2 - 2.1, -2.8, -tableLength / 2 + 2.5]
+        ];
+        legOffsets.forEach(pos => {
+            const leg = new THREE.Mesh(legGeo, legMat);
+            leg.position.set(...pos);
+            leg.castShadow = true;
+            tableGroup.add(leg);
+        });
+
+        // Net & Clamp Posts (Extending slightly beyond table width like Screenshot 4)
+        const netWidth = tableWidth + 1.8;
+        const netHeight = 1.45;
+        const netCanvas = document.createElement('canvas');
+        netCanvas.width = 1024;
+        netCanvas.height = 128;
+        const nCtx = netCanvas.getContext('2d');
+        nCtx.clearRect(0, 0, 1024, 128);
+
+        // Dark green/black mesh grid
+        nCtx.strokeStyle = 'rgba(20, 35, 25, 0.78)';
+        nCtx.lineWidth = 2;
+        for (let x = 0; x <= 1024; x += 8) {
+            nCtx.beginPath(); nCtx.moveTo(x, 14); nCtx.lineTo(x, 128); nCtx.stroke();
+        }
+        for (let y = 14; y <= 128; y += 8) {
+            nCtx.beginPath(); nCtx.moveTo(0, y); nCtx.lineTo(1024, y); nCtx.stroke();
+        }
+        // Crisp White Top Tape
+        nCtx.fillStyle = '#f8fafc';
+        nCtx.fillRect(0, 0, 1024, 15);
+        // Bottom dark trim
+        nCtx.fillStyle = '#1e293b';
+        nCtx.fillRect(0, 118, 1024, 10);
+
+        const netTex = new THREE.CanvasTexture(netCanvas);
+        const netMat = new THREE.MeshStandardMaterial({
+            map: netTex,
+            transparent: true,
+            side: THREE.DoubleSide,
+            roughness: 0.6
+        });
+        const netMesh = new THREE.Mesh(new THREE.PlaneGeometry(netWidth, netHeight), netMat);
+        netMesh.position.set(0, netHeight / 2 + 0.12, 0);
+        netMesh.castShadow = true;
+        tableGroup.add(netMesh);
+
+        // Left & Right Net Metal Posts
+        const postGeo = new THREE.BoxGeometry(0.24, netHeight + 0.2, 0.24);
+        const leftPost = new THREE.Mesh(postGeo, apronDarkMat);
+        leftPost.position.set(-netWidth / 2, netHeight / 2 + 0.05, 0);
+        tableGroup.add(leftPost);
+
+        const rightPost = new THREE.Mesh(postGeo, apronDarkMat);
+        rightPost.position.set(netWidth / 2, netHeight / 2 + 0.05, 0);
+        tableGroup.add(rightPost);
+
+        scene.add(tableGroup);
+
+        // --- 4. 3D Paddles (Red Player & Blue Opponent matching Screenshot 4) ---
+        function build3DPaddle(baseHex, darkHex) {
+            const group = new THREE.Group();
+
+            // Circular Rubber Blade
+            const bladeGeo = new THREE.CylinderGeometry(paddleRadius, paddleRadius, 0.22, 48);
+            bladeGeo.rotateX(Math.PI / 2);
+            bladeGeo.scale(1.0, 1.06, 1.0);
+            const bladeMat = new THREE.MeshStandardMaterial({
+                map: createPaddleRubberTexture(baseHex, darkHex),
+                roughness: 0.78,
+                metalness: 0.05
+            });
+            const blade = new THREE.Mesh(bladeGeo, bladeMat);
+            blade.castShadow = true;
+            group.add(blade);
+
+            // Natural Wood Handle
+            const handleGeo = new THREE.CylinderGeometry(0.26, 0.36, 1.85, 20);
+            const handleMat = new THREE.MeshStandardMaterial({
+                color: 0xd49b63,
+                roughness: 0.65
+            });
+            const handle = new THREE.Mesh(handleGeo, handleMat);
+            handle.position.y = -paddleRadius - 0.65;
+            handle.castShadow = true;
+            group.add(handle);
+
+            return group;
+        }
+
+        playerPaddle = build3DPaddle('#ef2323', '#991b1b');
+        playerPaddle.position.set(0, 2.2, tableLength / 2 + 1.2);
+        scene.add(playerPaddle);
+
+        aiPaddle = build3DPaddle('#3b6ef5', '#1d4ed8');
+        aiPaddle.position.set(0, 2.2, -tableLength / 2 - 1.2);
+        scene.add(aiPaddle);
+
+        // --- 5. Yellow 3-Star Ping Pong Ball & Contact Shadow ---
+        const ballGeo = new THREE.SphereGeometry(ballRadius, 32, 32);
+        const ballMat = new THREE.MeshStandardMaterial({
+            color: 0xfacc15,
+            roughness: 0.25,
+            metalness: 0.05,
+            emissive: 0x3b2800
+        });
+        ball = new THREE.Mesh(ballGeo, ballMat);
+        ball.castShadow = true;
+        scene.add(ball);
+
+        // Soft blob shadow directly on the table under the ball for crisp depth perception
+        const shadowGeo = new THREE.CircleGeometry(ballRadius * 1.35, 24);
+        shadowGeo.rotateX(-Math.PI / 2);
+        const shadowMat = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            transparent: true,
+            opacity: 0.42
+        });
+        ballShadow = new THREE.Mesh(shadowGeo, shadowMat);
+        ballShadow.position.y = 0.14;
+        scene.add(ballShadow);
+
+        // Visual Table Bounce Ripple Ring for clearer mobile depth perception
+        const ringGeo = new THREE.RingGeometry(0.18, 0.34, 24);
+        ringGeo.rotateX(-Math.PI / 2);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.0,
+            side: THREE.DoubleSide
+        });
+        bounceRing = new THREE.Mesh(ringGeo, ringMat);
+        bounceRing.position.y = 0.15;
+        scene.add(bounceRing);
+
+        // Apply responsive camera framing immediately
+        onResize();
+
+        // Event Listeners
+        window.addEventListener('resize', onResize);
+        window.addEventListener('mousemove', onPointerMove);
+        window.addEventListener('touchmove', onPointerMove, { passive: false });
+        window.addEventListener('mousedown', onPointerDown);
+        window.addEventListener('touchstart', onPointerDown, { passive: false });
+
+        renderer.setAnimationLoop(animateLoop);
+    }
+
+    function onResize() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const aspect = w / h;
+
+        camera.aspect = aspect;
+
+        // Dynamically adapt FOV & camera distance on mobile portrait/landscape so full table width is always visible
+        if (aspect < 0.75) {
+            // Mobile Portrait
+            camera.fov = 58;
+            camera.position.set(0, 13.8, 35.5);
+            camera.lookAt(0, 0.2, -1.5);
+        } else if (aspect < 1.15) {
+            // Tablet / Square
+            camera.fov = 48;
+            camera.position.set(0, 11.8, 30.5);
+            camera.lookAt(0, 0.3, -2.0);
+        } else {
+            // Desktop / Landscape
+            camera.fov = 42;
+            camera.position.set(0, 10.2, 26.8);
+            camera.lookAt(0, 0.4, -2.5);
+        }
+
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+    }
+
+    function updatePointerNorm(clientX, clientY) {
+        pointerNorm.x = (clientX / window.innerWidth) * 2 - 1;
+        pointerNorm.y = -(clientY / window.innerHeight) * 2 + 1;
+    }
+
+    function onPointerMove(e) {
+        if (e.touches && e.touches.length > 0) {
+            isTouchActive = true;
+            if (gameState === 'SERVING' || gameState === 'PLAYING') {
+                e.preventDefault();
+            }
+            updatePointerNorm(e.touches[0].clientX, e.touches[0].clientY);
+        } else {
+            updatePointerNorm(e.clientX, e.clientY);
+        }
+
+        // If waiting for player serve and user swipes upward, trigger serve
+        if (gameState === 'SERVING' && playerServing && paddleVel.z < -5.5) {
+            executeServe(true);
+        }
+    }
+
+    function onPointerDown(e) {
+        if (e.target.closest('button') || e.target.closest('#modal-container')) return;
+
+        if (e.touches && e.touches.length > 0) {
+            isTouchActive = true;
+            if (gameState === 'SERVING' || gameState === 'PLAYING') {
+                e.preventDefault();
+            }
+            updatePointerNorm(e.touches[0].clientX, e.touches[0].clientY);
+            // Snap previous paddle position on new touch so tapping doesn't cause an artificial velocity spike
+            const touchSensitivity = window.innerWidth < 768 ? 1.32 : 1.0;
+            const snapX = THREE.MathUtils.clamp(pointerNorm.x * touchSensitivity * (tableWidth * 0.72), -tableWidth * 0.75, tableWidth * 0.75);
+            playerPaddle.position.x = THREE.MathUtils.lerp(playerPaddle.position.x, snapX, 0.5);
+            prevPaddlePos.copy(playerPaddle.position);
+            paddleVel.set(0, 0, 0);
+        } else {
+            isTouchActive = false;
+            updatePointerNorm(e.clientX, e.clientY);
+        }
+
+        if (gameState === 'SERVING' && playerServing) {
+            executeServe(true);
+        }
+    }
+
+    // =========================================================================
+    // 5. SERVING, RALLY PHYSICS & SMART 3D PADDLE ASSIST
+    // =========================================================================
+    function triggerBounceEffect(x, z) {
+        if (!bounceRing) return;
+        bounceRing.position.set(x, 0.15, z);
+        bounceRing.scale.setScalar(0.5);
+        bounceRing.material.opacity = 0.75;
+    }
+
+    function prepareServe() {
+        gameState = 'SERVING';
+        ballVel.set(0, 0, 0);
+        ballSpin = 0;
+        bouncesOnCurrentSide = 0;
+        hitCooldown = 0;
+
+        // Official Table Tennis rule: serve alternates every 2 points
+        playerServing = Math.floor(totalPointsPlayed / 2) % 2 === 0;
+
+        const promptEl = document.getElementById('serve-prompt');
+        if (playerServing) {
+            promptEl.textContent = isTouchActive ? 'TAP OR SWIPE UP TO SERVE' : 'SWIPE OR CLICK TO SERVE';
+            promptEl.style.opacity = '1';
+            ball.position.set(playerPaddle.position.x * 0.4, 2.1, tableLength / 2 - 2.2);
+        } else {
+            promptEl.textContent = 'OPPONENT SERVING...';
+            promptEl.style.opacity = '1';
+            ball.position.set(0, 2.1, -tableLength / 2 + 2.2);
+
+            setTimeout(() => {
+                if (gameState === 'SERVING' && !playerServing) {
+                    executeServe(false);
+                }
+            }, 850);
+        }
+    }
+
+    // Calculates exact upward velocity needed so the ball arcs over the net and lands at targetZ
+    function launchBallToTarget(startPos, targetX, targetZ, speedZ) {
+        const dz = targetZ - startPos.z;
+        let currentSpeedZ = Math.abs(speedZ);
+        let vz = Math.sign(dz) * currentSpeedZ;
+        let flightTime = Math.abs(dz / vz);
+
+        const targetY = 0.13 + ballRadius;
+        const dy = targetY - startPos.y;
+
+        // Kinematics: dy = vy * t + 0.5 * g * t^2  =>  vy = (dy - 0.5 * g * t^2) / t
+        let vy = (dy - 0.5 * gravity * flightTime * flightTime) / flightTime;
+
+        // Guarantee safe net clearance at z = 0 so shots never unfairly clip the net
+        const distToNet = Math.abs(startPos.z);
+        const timeToNet = distToNet / currentSpeedZ;
+        const heightAtNet = startPos.y + vy * timeToNet + 0.5 * gravity * timeToNet * timeToNet;
+        const minNetClearance = 1.95;
+
+        if (heightAtNet < minNetClearance && timeToNet > 0.05) {
+            // Boost upward arc to clear the net cleanly and adjust speed so it still lands on table
+            vy = (minNetClearance - startPos.y - 0.5 * gravity * timeToNet * timeToNet) / timeToNet;
+            const disc = vy * vy + 2 * gravity * dy;
+            if (disc > 0) {
+                flightTime = (-vy - Math.sqrt(disc)) / gravity;
+                vz = dz / flightTime;
+            }
+        }
+
+        const dx = targetX - startPos.x;
+        const vx = dx / flightTime;
+
+        return new THREE.Vector3(vx, THREE.MathUtils.clamp(vy, 5.5, 16.5), vz);
+    }
+
+    function executeServe(byPlayer) {
+        if (gameState !== 'SERVING') return;
+        gameState = 'PLAYING';
+        document.getElementById('serve-prompt').style.opacity = '0';
+        sfx.playPaddleHit(1.2);
+
+        bouncesOnCurrentSide = 0;
+        hitCooldown = 0.18;
+
+        if (byPlayer) {
+            lastHitter = 'PLAYER';
+            const aimX = THREE.MathUtils.clamp(
+                (pointerNorm.x * 4.8) + paddleVel.x * 0.12,
+                -tableWidth / 2 + 1.6,
+                tableWidth / 2 - 1.6
+            );
+            ball.position.set(playerPaddle.position.x * 0.5, 2.1, tableLength / 2 - 1.8);
+            const targetZ = -tableLength / 2 + 4.2;
+            ballVel.copy(launchBallToTarget(ball.position, aimX, targetZ, 26.5));
+            ballSpin = THREE.MathUtils.clamp(paddleVel.x * 0.1, -3.5, 3.5);
+        } else {
+            lastHitter = 'AI';
+            const stage = TOUR_STAGES[selectedStage - 1];
+            ball.position.set(aiPaddle.position.x, 2.1, -tableLength / 2 + 1.8);
+            const aimX = (Math.random() - 0.5) * (tableWidth - 4.2);
+            const targetZ = tableLength / 2 - 4.2;
+            const serveSpeed = 24.5 * Math.min(1.15, Math.max(0.88, stage.speed));
+            ballVel.copy(launchBallToTarget(ball.position, aimX, targetZ, serveSpeed));
+            ballSpin = (Math.random() - 0.5) * 2.2;
+        }
+    }
+
+    function awardPoint(playerWonPoint) {
+        if (gameState !== 'PLAYING') return;
+        gameState = 'POINT_DELAY';
+
+        if (playerWonPoint) {
+            scorePlayer++;
+        } else {
+            scoreAi++;
+        }
+        totalPointsPlayed++;
+        sfx.playPoint(playerWonPoint);
+        updateHUDScore();
+
+        // Check Win Condition (11 points, win by 2)
+        if ((scorePlayer >= WINNING_SCORE || scoreAi >= WINNING_SCORE) && Math.abs(scorePlayer - scoreAi) >= 2) {
+            const playerWonMatch = scorePlayer > scoreAi;
+            if (playerWonMatch && selectedStage === unlockedStage && unlockedStage < TOUR_STAGES.length) {
+                unlockedStage++;
+            }
+            setTimeout(() => showMatchEndModal(playerWonMatch), 700);
+        } else {
+            setTimeout(() => {
+                if (gameState === 'POINT_DELAY') prepareServe();
+            }, 1100);
+        }
+    }
+
+    function stepPhysics(dt) {
+        if (gameState !== 'PLAYING') return;
+
+        if (hitCooldown > 0) hitCooldown -= dt;
+        prevBallPos.copy(ball.position);
+
+        // Apply Gravity & Magnus Spin Curve
+        ballVel.y += gravity * dt;
+        ballVel.x += ballSpin * dt * 2.2;
+
+        // Advance Ball
+        ball.position.addScaledVector(ballVel, dt);
+
+        // Update Contact Shadow on Table
+        const onTableBounds = Math.abs(ball.position.x) <= tableWidth / 2 + 0.8 && Math.abs(ball.position.z) <= tableLength / 2 + 0.8;
+        if (onTableBounds && ball.position.y >= 0) {
+            ballShadow.visible = true;
+            ballShadow.position.x = ball.position.x;
+            ballShadow.position.z = ball.position.z;
+            const heightFactor = Math.max(0.22, 1 - (ball.position.y / 8));
+            ballShadow.scale.setScalar(heightFactor);
+        } else {
+            ballShadow.visible = false;
+        }
+
+        // --- 1. Table Surface Bounce ---
+        const surfaceY = 0.125 + ballRadius;
+        if (ball.position.y <= surfaceY && prevBallPos.y >= surfaceY - 0.45 && ballVel.y < 0) {
+            if (Math.abs(ball.position.x) <= tableWidth / 2 + 0.25 && Math.abs(ball.position.z) <= tableLength / 2 + 0.25) {
+                ball.position.y = surfaceY;
+                ballVel.y = Math.abs(ballVel.y) * 0.85;
+                sfx.playTableBounce();
+                triggerBounceEffect(ball.position.x, ball.position.z);
+
+                // Track legal table bounces on receiver's side
+                const bouncedOnPlayerSide = ball.position.z > 0;
+                if ((lastHitter === 'PLAYER' && !bouncedOnPlayerSide) || (lastHitter === 'AI' && bouncedOnPlayerSide)) {
+                    bouncesOnCurrentSide++;
+                    if (bouncesOnCurrentSide >= 2) {
+                        // Double bounce on receiver's side -> hitter wins point
+                        awardPoint(lastHitter === 'PLAYER');
+                        return;
+                    }
+                }
+            }
+        }
+
+        // --- 2. Net Collision ---
+        const netTopY = 1.55;
+        if (prevBallPos.z * ball.position.z <= 0 && Math.abs(ball.position.z) < 0.8 && ball.position.y < netTopY) {
+            if (Math.abs(ball.position.x) <= tableWidth / 2 + 0.9) {
+                sfx.playNetHit();
+                if (ball.position.y > netTopY - 0.35) {
+                    // Net cord graze! Ball pops up slightly and continues over
+                    ball.position.y = netTopY + 0.08;
+                    ballVel.y = Math.max(5.0, Math.abs(ballVel.y) * 0.65);
+                    ballVel.z *= 0.78;
+                } else {
+                    // Solid net hit -> pops back and point goes to opponent of lastHitter
+                    ball.position.z = prevBallPos.z > 0 ? 0.4 : -0.4;
+                    ballVel.z *= -0.25;
+                    ballVel.x *= 0.4;
+                    awardPoint(lastHitter !== 'PLAYER');
+                    return;
+                }
+            }
+        }
+
+        // --- 3. Player Paddle Collision (Forgiving 3D Sweep for Mobile & Desktop) ---
+        const playerStrikeZ = playerPaddle.position.z - 0.3;
+        const inPlayerZZone = (prevBallPos.z <= playerStrikeZ + 1.3 && ball.position.z >= playerStrikeZ - 1.1) ||
+                              (Math.abs(ball.position.z - playerStrikeZ) <= 1.15);
+
+        if (ballVel.z > 0 && hitCooldown <= 0 && inPlayerZZone) {
+            const dx = ball.position.x - playerPaddle.position.x;
+            const dy = ball.position.y - playerPaddle.position.y;
+            const hitRadiusX = paddleRadius + ballRadius + (isTouchActive ? 1.15 : 0.85);
+            const hitRadiusY = paddleRadius + ballRadius + 1.25;
+
+            if (Math.abs(dx) <= hitRadiusX && Math.abs(dy) <= hitRadiusY) {
+                // Player successfully strikes the ball!
+                lastHitter = 'PLAYER';
+                bouncesOnCurrentSide = 0;
+                hitCooldown = 0.18;
+
+                // Determine shot speed from forward push and rally tempo
+                const swipeBoost = THREE.MathUtils.clamp(-paddleVel.z * 0.18, 0, 6.5);
+                const returnSpeedZ = THREE.MathUtils.clamp(Math.abs(ballVel.z) * 1.02 + swipeBoost, 24.5, 35.5);
+
+                // Aim based on paddle offset + horizontal swipe direction
+                const clampedSwipeX = THREE.MathUtils.clamp(paddleVel.x, -18, 18);
+                const rawTargetX = (pointerNorm.x * (tableWidth * 0.38)) + (clampedSwipeX * 0.16) - (dx * 1.35);
+                const targetX = THREE.MathUtils.clamp(rawTargetX, -tableWidth / 2 + 1.1, tableWidth / 2 - 1.1);
+                const targetZ = -tableLength / 2 + THREE.MathUtils.clamp(4.2 - swipeBoost * 0.28, 2.2, 6.0);
+
+                ball.position.z = Math.min(ball.position.z, playerStrikeZ - 0.1);
+                ballVel.copy(launchBallToTarget(ball.position, targetX, targetZ, returnSpeedZ));
+                ballSpin = THREE.MathUtils.clamp(clampedSwipeX * 0.15, -5.0, 5.0);
+
+                sfx.playPaddleHit(returnSpeedZ / 10);
+
+                // Quick paddle hit recoil animation
+                playerPaddle.position.z -= 0.45;
+            }
+        }
+
+        // --- 4. AI Opponent Paddle Collision ---
+        const aiStrikeZ = aiPaddle.position.z + 0.35;
+        const inAiZZone = (prevBallPos.z >= aiStrikeZ - 1.3 && ball.position.z <= aiStrikeZ + 1.1) ||
+                          (Math.abs(ball.position.z - aiStrikeZ) <= 1.1);
+
+        if (ballVel.z < 0 && hitCooldown <= 0 && inAiZZone) {
+            const dx = ball.position.x - aiPaddle.position.x;
+            const dy = ball.position.y - aiPaddle.position.y;
+            const hitRadius = paddleRadius + ballRadius + 0.65;
+
+            if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+                lastHitter = 'AI';
+                bouncesOnCurrentSide = 0;
+                hitCooldown = 0.18;
+
+                const stage = TOUR_STAGES[selectedStage - 1];
+                const returnSpeedZ = THREE.MathUtils.clamp(24.5 * stage.speed + Math.random() * 2.5, 22.5, 35.0);
+
+                // AI aims strategically across the table
+                const cornerAim = (Math.random() - 0.5) * (tableWidth - 2.6);
+                const targetX = THREE.MathUtils.clamp(cornerAim, -tableWidth / 2 + 1.2, tableWidth / 2 - 1.2);
+                const targetZ = tableLength / 2 - (2.6 + Math.random() * 3.5);
+
+                ball.position.z = Math.max(ball.position.z, aiStrikeZ + 0.1);
+                ballVel.copy(launchBallToTarget(ball.position, targetX, targetZ, returnSpeedZ));
+                ballSpin = (Math.random() - 0.5) * 3.2;
+
+                sfx.playPaddleHit(returnSpeedZ / 10);
+                aiPaddle.position.z += 0.4;
+            }
+        }
+
+        // --- 5. Out-of-Bounds / Missed Ball Resolution ---
+        if (ball.position.y < -1.8 || Math.abs(ball.position.z) > tableLength / 2 + 7.5) {
+            if (bouncesOnCurrentSide === 0) {
+                awardPoint(lastHitter !== 'PLAYER');
+            } else {
+                awardPoint(lastHitter === 'PLAYER');
+            }
+        }
+    }
+
+    function updatePhysics(dt) {
+        // Run 4 physics sub-steps per frame so fast balls never tunnel through paddles or table on mobile
+        const subSteps = 4;
+        const subDt = dt / subSteps;
+        for (let i = 0; i < subSteps; i++) {
+            if (gameState !== 'PLAYING') break;
+            stepPhysics(subDt);
+        }
+
+        // Fade out bounce ring ripple
+        if (bounceRing && bounceRing.material.opacity > 0) {
+            bounceRing.scale.addScalar(dt * 4.5);
+            bounceRing.material.opacity = Math.max(0, bounceRing.material.opacity - dt * 2.4);
+        }
+    }
+
+    function updatePaddles(dt) {
+        // --- 1. Smart Player Paddle Control (Mobile & Desktop) ---
+        prevPaddlePos.copy(playerPaddle.position);
+
+        // Boost horizontal sensitivity on narrow mobile screens so players don't run out of thumb room
+        const sensitivityX = (isTouchActive || window.innerWidth < 768) ? 1.32 : 1.05;
+        const desiredX = THREE.MathUtils.clamp(pointerNorm.x * sensitivityX * (tableWidth * 0.72), -tableWidth * 0.78, tableWidth * 0.78);
+
+        // Forward/Back (Z) maps smoothly to pointer Y
+        const desiredZ = tableLength / 2 + 1.0 - THREE.MathUtils.clamp(pointerNorm.y * 1.8, -1.2, 2.2);
+
+        // Automatic Vertical (Y) Assist: smoothly tracks incoming ball height so player never misses under/over in 3D
+        let desiredY = 2.1 + pointerNorm.y * 0.45;
+        if (gameState === 'PLAYING' && ballVel.z > 0 && ball.position.z > -6) {
+            desiredY = THREE.MathUtils.clamp(ball.position.y, 0.85, 4.2);
+        }
+
+        paddleTarget.set(desiredX, desiredY, desiredZ);
+        playerPaddle.position.lerp(paddleTarget, Math.min(1, dt * 25));
+
+        // Calculate instantaneous paddle velocity (clamped to prevent mobile tap spikes)
+        if (dt > 0.0001) {
+            paddleVel.subVectors(playerPaddle.position, prevPaddlePos).divideScalar(dt);
+            paddleVel.clampLength(0, 32);
+        }
+
+        // Natural wrist tilt based on horizontal position
+        playerPaddle.rotation.z = THREE.MathUtils.clamp(-playerPaddle.position.x * 0.08, -0.65, 0.65);
+        playerPaddle.rotation.x = THREE.MathUtils.clamp((playerPaddle.position.y - 2.2) * 0.08, -0.3, 0.3);
+
+        // --- 2. Predictive AI Opponent Movement ---
+        const stage = TOUR_STAGES[selectedStage - 1];
+        let aiTargetX = 0;
+        let aiTargetY = 2.1;
+        const aiBaseZ = -tableLength / 2 - 1.2;
+
+        if (gameState === 'PLAYING' && ballVel.z < 0) {
+            const timeToReach = Math.abs((aiBaseZ - ball.position.z) / ballVel.z);
+            const predictedX = ball.position.x + ballVel.x * Math.min(0.65, timeToReach * 0.75);
+            aiTargetX = THREE.MathUtils.clamp(predictedX, -tableWidth * 0.68, tableWidth * 0.68);
+            aiTargetY = THREE.MathUtils.clamp(ball.position.y, 0.9, 4.0);
+        }
+
+        const aiFollowSpeed = (6.8 + selectedStage * 0.55) * stage.speed;
+        aiPaddle.position.x = THREE.MathUtils.lerp(aiPaddle.position.x, aiTargetX, Math.min(1, dt * aiFollowSpeed));
+        aiPaddle.position.y = THREE.MathUtils.lerp(aiPaddle.position.y, aiTargetY, Math.min(1, dt * 12));
+        aiPaddle.position.z = THREE.MathUtils.lerp(aiPaddle.position.z, aiBaseZ, Math.min(1, dt * 10));
+        aiPaddle.rotation.z = THREE.MathUtils.clamp(-aiPaddle.position.x * 0.07, -0.55, 0.55);
+    }
+
+    function animateLoop() {
+        const dt = Math.min(clock.getDelta(), 0.05);
+
+        if (gameState === 'SERVING' || gameState === 'PLAYING' || gameState === 'POINT_DELAY') {
+            updatePaddles(dt);
+        }
+
+        if (gameState === 'SERVING' && playerServing) {
+            // Ball hovers gently near player's paddle while waiting for serve
+            ball.position.x = THREE.MathUtils.lerp(ball.position.x, playerPaddle.position.x * 0.5, 0.15);
+            ball.position.y = 1.95 + Math.sin(clock.elapsedTime * 5) * 0.12;
+            ball.position.z = tableLength / 2 - 1.8;
+            ballShadow.visible = true;
+            ballShadow.position.x = ball.position.x;
+            ballShadow.position.z = ball.position.z;
+        } else if (gameState === 'PLAYING') {
+            updatePhysics(dt);
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    // =========================================================================
+    // 6. UI NAVIGATION & SCREEN CONTROLLER
+    // =========================================================================
+    const screens = {
+        TITLE: document.getElementById('screen-title'),
+        MAP: document.getElementById('screen-map'),
+        VS: document.getElementById('screen-vs'),
+        HUD: document.getElementById('hud-layer')
+    };
+
+    function showScreen(screenKey) {
+        Object.keys(screens).forEach(k => {
+            if (k === screenKey) {
+                screens[k].classList.remove('hidden-screen');
+            } else {
+                screens[k].classList.add('hidden-screen');
+            }
+        });
+    }
+
+    // Build Interactive World Map Nodes (1 to 10)
+    function renderWorldMapNodes() {
+        const container = document.getElementById('map-nodes-container');
+        container.innerHTML = '';
+
+        TOUR_STAGES.forEach(stage => {
+            const isUnlocked = stage.id <= unlockedStage;
+            const isSelected = stage.id === selectedStage;
+
+            if (isSelected) {
+                const burst = document.createElement('div');
+                burst.className = 'starburst';
+                burst.style.left = `${stage.x}%`;
+                burst.style.top = `${stage.y}%`;
+                container.appendChild(burst);
+            }
+
+            const node = document.createElement('button');
+            node.className = `map-node ${isUnlocked ? 'unlocked' : 'locked'} ${isSelected ? 'selected' : ''}`;
+            node.style.left = `${stage.x}%`;
+            node.style.top = `${stage.y}%`;
+            node.textContent = stage.id;
+            node.title = `${stage.id}. ${stage.name}`;
+
+            // Add silver trophy next to active/unlocked node like Screenshot 2
+            if (stage.id === selectedStage) {
+                const trophyBadge = document.createElement('div');
+                trophyBadge.className = 'absolute -right-7 -top-4 w-9 h-9 pointer-events-none drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)]';
+                trophyBadge.innerHTML = `<svg viewBox="0 0 64 64" class="w-full h-full">
+                    <path d="M18,10 H46 V24 C46,35 38,42 32,44 C26,42 18,35 18,24 Z" fill="#f8fafc" stroke="#475569" stroke-width="2"/>
+                    <path d="M18,14 H10 C10,24 14,30 20,32" fill="none" stroke="#e2e8f0" stroke-width="4"/>
+                    <path d="M46,14 H54 C54,24 50,30 44,32" fill="none" stroke="#e2e8f0" stroke-width="4"/>
+                    <rect x="28" y="43" width="8" height="9" fill="#cbd5e1"/>
+                    <rect x="20" y="52" width="24" height="6" rx="2" fill="#1e293b"/>
+                </svg>`;
+                node.appendChild(trophyBadge);
+            }
+
+            node.addEventListener('click', () => {
+                sfx.playClick();
+                selectedStage = stage.id;
+                renderWorldMapNodes();
+            });
+
+            container.appendChild(node);
+        });
+    }
+
+    function populateVSScreen() {
+        const playerCountry = PLAYER_COUNTRIES[playerCountryIndex];
+        const stage = TOUR_STAGES[selectedStage - 1];
+
+        document.getElementById('vs-stage-title').textContent = `#${stage.id}`;
+        document.getElementById('vs-match-progress').textContent = `${stage.id}/6`;
+        document.getElementById('vs-player-flag').innerHTML = getFlagSVG(playerCountry.code);
+        document.getElementById('vs-ai-flag').innerHTML = getFlagSVG(stage.code);
+        document.getElementById('vs-country-names').textContent = `${playerCountry.name} VS ${stage.name}`;
+    }
+
+    function startMatch() {
+        const playerCountry = PLAYER_COUNTRIES[playerCountryIndex];
+        const stage = TOUR_STAGES[selectedStage - 1];
+
+        scorePlayer = 0;
+        scoreAi = 0;
+        totalPointsPlayed = 0;
+
+        document.getElementById('hud-player-flag').innerHTML = getFlagSVG(playerCountry.code);
+        document.getElementById('hud-ai-flag').innerHTML = getFlagSVG(stage.code);
+        updateHUDScore();
+
+        showScreen('HUD');
+        prepareServe();
+    }
+
+    function updateHUDScore() {
+        document.getElementById('hud-score-player').textContent = scorePlayer;
+        document.getElementById('hud-score-ai').textContent = scoreAi;
+    }
+
+    // Modal Helper
+    function openModal(title, bodyHTML, buttons) {
+        const modal = document.getElementById('modal-container');
+        document.getElementById('modal-title').textContent = title;
+        document.getElementById('modal-body').innerHTML = bodyHTML;
+
+        const actions = document.getElementById('modal-actions');
+        actions.innerHTML = '';
+        buttons.forEach(btn => {
+            const b = document.createElement('button');
+            b.className = 'px-6 py-3 rounded-full font-bold uppercase tracking-wider text-sm shadow-lg transition-transform hover:scale-105 ' +
+                (btn.primary ? 'bg-yellow-400 text-yellow-950 border-2 border-yellow-200' : 'bg-slate-700 text-white border border-slate-500');
+            b.textContent = btn.label;
+            b.onclick = () => {
+                sfx.playClick();
+                modal.classList.add('hidden-screen');
+                if (btn.onClick) btn.onClick();
+            };
+            actions.appendChild(b);
+        });
+
+        modal.classList.remove('hidden-screen');
+    }
+
+    function showMatchEndModal(playerWon) {
+        const stage = TOUR_STAGES[selectedStage - 1];
+        const title = playerWon ? 'VICTORY!' : 'MATCH OVER';
+        const msg = playerWon
+            ? `You defeated <b>${stage.name}</b> (${scorePlayer} - ${scoreAi})!<br>Next World Tour stage is ready.`
+            : `<b>${stage.name}</b> won the match (${scoreAi} - ${scorePlayer}).<br>Challenge them again!`;
+
+        const buttons = [
+            {
+                label: 'World Map',
+                primary: false,
+                onClick: () => {
+                    gameState = 'MENU';
+                    if (playerWon && selectedStage < TOUR_STAGES.length) selectedStage++;
+                    renderWorldMapNodes();
+                    showScreen('MAP');
+                }
+            },
+            {
+                label: playerWon && selectedStage < TOUR_STAGES.length ? 'Next Opponent' : 'Rematch',
+                primary: true,
+                onClick: () => {
+                    if (playerWon && selectedStage < TOUR_STAGES.length) {
+                        selectedStage++;
+                        populateVSScreen();
+                        showScreen('VS');
+                    } else {
+                        startMatch();
+                    }
+                }
+            }
+        ];
+
+        openModal(title, msg, buttons);
+    }
+
+    // Wire up UI Buttons
+    function setupUIEvents() {
+        // Title -> Map
+        document.getElementById('btn-title-play').addEventListener('click', () => {
+            sfx.playClick();
+            renderWorldMapNodes();
+            showScreen('MAP');
+        });
+
+        // Map -> Title or VS
+        document.getElementById('btn-map-back').addEventListener('click', () => {
+            sfx.playClick();
+            showScreen('TITLE');
+        });
+        document.getElementById('btn-map-play').addEventListener('click', () => {
+            sfx.playClick();
+            populateVSScreen();
+            showScreen('VS');
+        });
+
+        // VS -> Map or Match
+        document.getElementById('btn-vs-back').addEventListener('click', () => {
+            sfx.playClick();
+            renderWorldMapNodes();
+            showScreen('MAP');
+        });
+        document.getElementById('btn-vs-play').addEventListener('click', () => {
+            sfx.playClick();
+            startMatch();
+        });
+
+        // Player Country Flag Cycle on Title Screen
+        document.getElementById('btn-flag-selector').addEventListener('click', () => {
+            sfx.playClick();
+            playerCountryIndex = (playerCountryIndex + 1) % PLAYER_COUNTRIES.length;
+            const c = PLAYER_COUNTRIES[playerCountryIndex];
+            openModal('COUNTRY SELECTED', `You are now representing <b>${c.name}</b> in the World Tour!`, [
+                { label: 'OK', primary: true }
+            ]);
+        });
+
+        // Info Modal
+        document.getElementById('btn-info').addEventListener('click', () => {
+            sfx.playClick();
+            openModal(
+                'HOW TO PLAY',
+                'Move your mouse or finger to position your red paddle.<br><br>' +
+                '• <b>Aim & Curve:</b> Swipe left or right as you hit the ball to place angled shots and spin.<br>' +
+                '• <b>Power Smash:</b> Push forward while striking to speed up the rally.<br>' +
+                '• <b>Rules:</b> First to <b>11 points</b> (win by 2) wins the stage!',
+                [{ label: 'Got It', primary: true }]
+            );
+        });
+
+        // Trophy Room Modal
+        document.getElementById('btn-trophy').addEventListener('click', () => {
+            sfx.playClick();
+            openModal(
+                'TROPHY ROOM',
+                `Stages Conquered: <b>${unlockedStage - 1} / ${TOUR_STAGES.length}</b><br>` +
+                `Current National Team: <b>${PLAYER_COUNTRIES[playerCountryIndex].name}</b>`,
+                [{ label: 'Close', primary: true }]
+            );
+        });
+
+        // Pause Button in Gameplay
+        document.getElementById('btn-pause').addEventListener('click', () => {
+            sfx.playClick();
+            const previousState = gameState;
+            gameState = 'PAUSED';
+            openModal('GAME PAUSED', `Current Score: <b>${scorePlayer} - ${scoreAi}</b>`, [
+                {
+                    label: 'Quit to Map',
+                    primary: false,
+                    onClick: () => {
+                        gameState = 'MENU';
+                        renderWorldMapNodes();
+                        showScreen('MAP');
+                    }
+                },
+                {
+                    label: 'Restart',
+                    primary: false,
+                    onClick: () => startMatch()
+                },
+                {
+                    label: 'Resume',
+                    primary: true,
+                    onClick: () => { gameState = previousState; }
+                }
+            ]);
+        });
+
+        // Sound Toggle Buttons across all screens
+        document.querySelectorAll('.btn-sound-toggle').forEach(btn => {
+            btn.addEventListener('click', () => {
+                sfx.enabled = !sfx.enabled;
+                if (sfx.enabled) sfx.playClick();
+                document.querySelectorAll('.sound-on-icon').forEach(el => el.classList.toggle('hidden', !sfx.enabled));
+                document.querySelectorAll('.sound-off-icon').forEach(el => el.classList.toggle('hidden', sfx.enabled));
+            });
+        });
+    }
+
+    // Boot Game
+    window.addEventListener('load', () => {
+        initGrungeOverlays();
+        drawCrossedPaddles('title-paddles-canvas', true);
+        drawCrossedPaddles('vs-paddles-canvas', false);
+        setupUIEvents();
+        init3DScene();
+    });
+</script>
+</body>
+</html>
